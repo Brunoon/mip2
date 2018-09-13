@@ -475,21 +475,20 @@ let viewer = {
    */
   fixSoftKeyboard () {
     if (platform.isAndroid()) {
-      window.addEventListener('resize', () => {
-        let element = document.activeElement
+      let dealScroll = element => {
         let tagName = element.tagName.toLowerCase()
 
         if (element && (tagName === 'input' || tagName === 'textarea')) {
-            setTimeout(() => {
-              if (typeof element.scrollIntoViewIfNeeded === 'function') {
-                element.scrollIntoViewIfNeeded()
-              } else if (typeof element.scrollIntoView === 'function') {
-                element.scrollIntoView()
-                document.body.scrollTop -= 44
-              }
-            }, 250)
-          }
-      })
+          setTimeout(() => {
+            if (typeof element.scrollIntoView === 'function') {
+              element.scrollIntoView()
+              document.body.scrollTop -= viewport.getHeight() / 2
+            }
+          }, 250)
+        }
+      }
+      event.delegate(document, 'input', 'focus', event => dealScroll(event.target))
+      event.delegate(document, 'input', 'click', event => dealScroll(event.target))
     }
   },
 
