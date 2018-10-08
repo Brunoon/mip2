@@ -12,6 +12,8 @@ import customElementsStore from './custom-element-store'
 import cssLoader from './util/dom/css-loader'
 import prerender from './client-prerender'
 
+const COMPONENTS_NEED_DELAY = ['MIP-IMG', 'MIP-CAROUSEL']
+
 class BaseElement extends HTMLElement {
   constructor (element) {
     super(element)
@@ -40,8 +42,6 @@ class BaseElement extends HTMLElement {
      */
     this._resources = resources
 
-    this.__innerHTML = this.innerHTML
-
     /**
      * Instantiated the custom element.
      * @type {Object}
@@ -59,11 +59,16 @@ class BaseElement extends HTMLElement {
     // Apply layout for this.
     this.classList.add('mip-element')
     this._layout = layout.applyLayout(this)
-    this.customElement.connectedCallback()
 
-    prerender.execute(() => {
-      this._resources.add(this)
-    }, this)
+    let func = () => {
+      this.customElement.connectedCallback()
+      // Add to resource manager.
+      prerender.execute(() => {
+        this._resources.add(this)
+      }, this)
+    }
+
+    COMPONENTS_NEED_DELAY.indexOf(this.tagName) !== -1 ? func() : setTimeout(func, 0)
   }
 
   disconnectedCallback () {
@@ -94,12 +99,6 @@ class BaseElement extends HTMLElement {
 
   isBuilt () {
     return this._built
-  }
-
-  cloneNode (deep) {
-    let newNode = super.cloneNode(deep)
-    newNode.__innerHTML = this.__innerHTML
-    return newNode
   }
 
   inViewport () {

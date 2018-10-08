@@ -81,18 +81,16 @@ function createBaseElementProto () {
    * When the element is inserted into the DOM, initialize the layout and add the element to the '_resources'.
    */
   proto.attachedCallback = function () {
-    if (this.tagName === 'MIP-DATA') {
-      // console.log('attachedCallback')
-    }
-
     // Apply layout for this.
     this._layout = layout.applyLayout(this)
-    this.customElement.attachedCallback()
 
-    prerender.execute(() => {
-      // Add to resource manager.
-      this._resources.add(this)
-    }, this)
+    setTimeout(() => {
+      this.customElement.attachedCallback()
+      prerender.execute(() => {
+        // Add to resource manager.
+        this._resources.add(this)
+      }, this)
+    }, 0)
   }
 
   /**
