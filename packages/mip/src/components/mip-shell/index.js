@@ -81,15 +81,13 @@ class MipShell extends CustomElement {
     if (ele) {
       try {
         tmpShellConfig = JSON.parse(ele.textContent.toString()) || {}
-        if (tmpShellConfig.alwaysReadConfigOnLoad !== undefined) {
-          this.alwaysReadConfigOnLoad = tmpShellConfig.alwaysReadConfigOnLoad
-        }
-        if (tmpShellConfig.transitionContainsHeader !== undefined) {
-          this.transitionContainsHeader = tmpShellConfig.transitionContainsHeader
-        }
-        if (tmpShellConfig.ignoreWarning !== undefined) {
-          this.ignoreWarning = tmpShellConfig.ignoreWarning
-        }
+        // 开头的分号是为了应对 rollup 的 BUG，否则会导致方括号和上一句的 || {} 连接在一起从而不执行
+        ;['alwaysReadConfigOnLoad', 'transitionContainsHeader', 'ignoreWarning'].forEach(key => {
+          if (tmpShellConfig[key] !== undefined) {
+            this[key] = tmpShellConfig[key]
+          }
+        })
+
         if (!tmpShellConfig.routes) {
           !this.ignoreWarning && console.warn('检测到 MIP Shell 配置没有包含 `routes` 数组，MIP 将自动生成一条默认的路由配置。')
           tmpShellConfig.routes = [{
@@ -371,9 +369,6 @@ class MipShell extends CustomElement {
         case 'updateShell':
           this.refreshShell({pageMeta: data.pageMeta})
           break
-        case 'slide':
-          this.slideHeader(data.direction)
-          break
         case 'togglePageMask':
           this.togglePageMask(data.toggle, data.options)
           break
@@ -498,13 +493,6 @@ class MipShell extends CustomElement {
     }
 
     // Refresh header
-    this.toggleTransition(false)
-    /* eslint-disable no-unused-expressions */
-    window.innerHeight
-    this.slideHeader('down')
-    window.innerHeight
-    /* eslint-enable no-unused-expressions */
-    this.toggleTransition(true)
     if (asyncRefresh) {
       // In async mode: (Invoked from `processShellConfig` by user)
       // 1. Render fade header with updated pageMeta
@@ -549,17 +537,6 @@ class MipShell extends CustomElement {
 
       // Rebind header events
       this.bindHeaderEvents()
-    }
-  }
-
-  slideHeader (direction) {
-    if (this.pauseBouncyHeader) {
-      return
-    }
-    if (direction === 'up') {
-      this.$el.classList.add('slide-up')
-    } else {
-      this.$el.classList.remove('slide-up')
     }
   }
 
@@ -623,14 +600,10 @@ class MipShell extends CustomElement {
       window.history.scrollRestoration = 'manual'
     }
 
-    let {show: showHeader, bouncy} = this.currentPageMeta.header
+    let {show: showHeader} = this.currentPageMeta.header
     // Set `padding-top` on scroller
     if (showHeader) {
       document.body.classList.add('with-header')
-    }
-
-    if (bouncy) {
-      page.setupBouncyHeader()
     }
 
     // Cross origin
