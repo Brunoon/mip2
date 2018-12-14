@@ -53,6 +53,11 @@ let viewer = {
     this.rootName = fn.getRootName(window.name)
 
     /**
+     * SF 创建的第一个页面的 window.name
+     */
+    this.rootName = fn.getRootName(window.name)
+
+    /**
      * Send Message, keep messager only one if prerender have created
      *
      * @inner
@@ -91,7 +96,8 @@ let viewer = {
     fixedElement.init()
 
     // proxy <a mip-link>
-    this._proxyLink(this.page)
+    setTimeout(() => this._proxyLink(this.page), 0)
+
   },
 
   /**
@@ -329,18 +335,16 @@ let viewer = {
      * otherwise let TOP jump
      */
     event.delegate(document, 'a', 'click', function (event) {
-      let $a = this
-
       /**
        * browser will resolve fullpath, including path, query & hash
        * eg. http://localhost:8080/examples/page/tree.html?a=b#hash
-       * don't use `$a.getAttribute('href')`
+       * don't use `this.getAttribute('href')`
        */
-      let to = $a.href
-      let isMipLink = $a.hasAttribute('mip-link') || $a.getAttribute('data-type') === 'mip'
-      let replace = $a.hasAttribute('replace')
-      let cacheFirst = $a.hasAttribute('cache-first')
-      let state = self._getMipLinkData.call($a)
+      let to = this.href
+      let isMipLink = this.hasAttribute('mip-link') || this.getAttribute('data-type') === 'mip'
+      let replace = this.hasAttribute('replace')
+      let cacheFirst = this.hasAttribute('cache-first')
+      let state = self._getMipLinkData.call(this)
 
       /**
        * For mail、phone、market、app ...
@@ -355,7 +359,21 @@ let viewer = {
         return
       }
 
-      self.open(to, {isMipLink, replace, state, cacheFirst})
+      // 以下情况使用 MIP 接管页面跳转
+      // 1. Standalone
+      // 2. New MIP Service
+      let useNewMIPService = window.MIP.standalone || window.mipService === '2'
+      if (useNewMIPService) {
+        self.open(to, {isMipLink, replace, state, cacheFirst})
+      } else {
+        if (isMipLink) {
+          let message = self._getMessageData.call(this);
+          self.sendMessage(message.messageKey, message.messageData);
+        } else {
+          // other jump through '_top'
+          top.location.href = this.href;
+        }
+      }
 
       event.preventDefault()
     }, false)
@@ -377,33 +395,59 @@ let viewer = {
     }
   },
 
+  /**
+   * get alink postMessage data
+   * @return {Object} messageData
+   */
+  _getMessageData () {
+    let messageKey = 'loadiframe';
+    let messageData = {};
+    messageData.url = this.href;
+    if (this.hasAttribute('no-head')) {
+        messageData.nohead = true;
+    }
+    if (this.hasAttribute('mip-link')) {
+        let parent = this.parentNode;
+        messageData.title = parent.getAttribute('title') || parent.innerText.trim().split('\n')[0];
+        messageData.click = parent.getAttribute('data-click');
+    } else {
+        messageData.title = this.getAttribute('data-title') || this.innerText.trim().split('\n')[0];
+        messageData.click = this.getAttribute('data-click');
+    }
+    return {messageKey, messageData}
+  },
+
   handleBrowserQuirks () {
     // add normal scroll class to body. except ios in iframe.
     // Patch for ios+iframe is default in mip.css
     if (!platform.needSpecialScroll) {
-      document.documentElement.classList.add('mip-i-android-scroll')
-      document.body.classList.add('mip-i-android-scroll')
+      setTimeout(() => {
+        document.documentElement.classList.add('mip-i-android-scroll')
+        document.body.classList.add('mip-i-android-scroll')
+      }, 0)
     }
 
     // prevent bouncy scroll in iOS 7 & 8
     if (platform.isIos()) {
       let iosVersion = platform.getOsVersion()
       iosVersion = iosVersion ? iosVersion.split('.')[0] : ''
-      document.documentElement.classList.add('mip-i-ios-scroll')
-      window.addEventListener('orientationchange', () => {
-        document.documentElement.classList.remove('mip-i-ios-scroll')
-        setTimeout(() => {
-          document.documentElement.classList.add('mip-i-ios-scroll')
+      setTimeout(() => {
+        document.documentElement.classList.add('mip-i-ios-scroll')
+        document.documentElement.classList.add('mip-i-ios-width')
+        window.addEventListener('orientationchange', () => {
+          document.documentElement.classList.remove('mip-i-ios-scroll')
+          setTimeout(() => {
+            document.documentElement.classList.add('mip-i-ios-scroll')
+          })
         })
-      })
-      document.documentElement.classList.add('mip-i-ios-width')
+      }, 0)
 
       if (!this.page.isRootPage) {
         this.fixIOSPageFreeze()
       }
 
       if (this.isIframed) {
-        this.lockBodyScroll()
+        setTimeout(() => this.lockBodyScroll(), 0)
 
         // While the back button is clicked,
         // the cached page has some problems.

@@ -81,15 +81,13 @@ class MipShell extends CustomElement {
     if (ele) {
       try {
         tmpShellConfig = JSON.parse(ele.textContent.toString()) || {}
-        if (tmpShellConfig.alwaysReadConfigOnLoad !== undefined) {
-          this.alwaysReadConfigOnLoad = tmpShellConfig.alwaysReadConfigOnLoad
-        }
-        if (tmpShellConfig.transitionContainsHeader !== undefined) {
-          this.transitionContainsHeader = tmpShellConfig.transitionContainsHeader
-        }
-        if (tmpShellConfig.ignoreWarning !== undefined) {
-          this.ignoreWarning = tmpShellConfig.ignoreWarning
-        }
+        // 开头的分号是为了应对 rollup 的 BUG，否则会导致方括号和上一句的 || {} 连接在一起从而不执行
+        ;['alwaysReadConfigOnLoad', 'transitionContainsHeader', 'ignoreWarning'].forEach(key => {
+          if (tmpShellConfig[key] !== undefined) {
+            this[key] = tmpShellConfig[key]
+          }
+        })
+
         if (!tmpShellConfig.routes) {
           !this.ignoreWarning && console.warn('检测到 MIP Shell 配置没有包含 `routes` 数组，MIP 将自动生成一条默认的路由配置。')
           tmpShellConfig.routes = [{
@@ -215,10 +213,15 @@ class MipShell extends CustomElement {
       page.pageMeta = this.currentPageMeta
       this.initShell()
       this.initRouter()
-      this.bindRootEvents()
     }
 
-    this.bindAllEvents()
+    // 绑定事件改为异步，不阻塞发送 mippageload 事件，下同
+    setTimeout(() => {
+      if (page.isRootPage) {
+        this.bindRootEvents()
+      }
+      this.bindAllEvents()
+    }, 0)
   }
 
   disconnectedCallback () {
@@ -237,15 +240,45 @@ class MipShell extends CustomElement {
    * 4. Page mask (mainly used to cover header)
    */
   initShell () {
+    if (this.currentPageMeta.header && this.currentPageMeta.header.show) {
+      isHeaderShown = true
+      this.createHeader(true)
+    } else {
+      isHeaderShown = false
+    }
+
+    // Other sync parts
+    this.renderOtherParts()
+
+    setTimeout(() => {
+      if (!isHeaderShown) {
+        this.createHeader(false)
+      }
+
+      // Button wrapper & mask
+      let buttonGroup = this.currentPageMeta.header.buttonGroup
+      let {mask, buttonWrapper} = createMoreButtonWrapper(buttonGroup)
+      this.$buttonMask = mask
+      this.$buttonWrapper = buttonWrapper
+
+      // Page mask
+      this.$pageMask = createPageMask()
+
+      // Loading
+      this.$loading = createLoading(this.currentPageMeta)
+
+      // Other async parts
+      this.renderOtherPartsAsync()
+    }, 0)
+  }
+
+  createHeader (showHeader) {
     // Shell wrapper
     this.$wrapper = document.createElement('mip-fixed')
     this.$wrapper.setAttribute('type', 'top')
     this.$wrapper.classList.add('mip-shell-header-wrapper')
-    if (this.currentPageMeta.header && this.currentPageMeta.header.show) {
-      isHeaderShown = true
-    } else {
+    if (!showHeader) {
       this.$wrapper.classList.add('hide')
-      isHeaderShown = false
     }
 
     // Header
@@ -255,26 +288,6 @@ class MipShell extends CustomElement {
     this.$wrapper.insertBefore(this.$el, this.$wrapper.firstChild)
 
     document.body.insertBefore(this.$wrapper, document.body.firstChild)
-
-    // Other sync parts
-    this.renderOtherParts()
-
-    // Button wrapper & mask
-    let buttonGroup = this.currentPageMeta.header.buttonGroup
-    let {mask, buttonWrapper} = createMoreButtonWrapper(buttonGroup)
-    this.$buttonMask = mask
-    this.$buttonWrapper = buttonWrapper
-
-    // Page mask
-    this.$pageMask = createPageMask()
-
-    // Loading
-    this.$loading = createLoading(this.currentPageMeta)
-
-    setTimeout(() => {
-      // Other async parts
-      this.renderOtherPartsAsync()
-    }, 0)
   }
 
   initRouter () {
@@ -355,9 +368,6 @@ class MipShell extends CustomElement {
       switch (type) {
         case 'updateShell':
           this.refreshShell({pageMeta: data.pageMeta})
-          break
-        case 'slide':
-          this.slideHeader(data.direction)
           break
         case 'togglePageMask':
           this.togglePageMask(data.toggle, data.options)
@@ -483,13 +493,6 @@ class MipShell extends CustomElement {
     }
 
     // Refresh header
-    this.toggleTransition(false)
-    /* eslint-disable no-unused-expressions */
-    window.innerHeight
-    this.slideHeader('down')
-    window.innerHeight
-    /* eslint-enable no-unused-expressions */
-    this.toggleTransition(true)
     if (asyncRefresh) {
       // In async mode: (Invoked from `processShellConfig` by user)
       // 1. Render fade header with updated pageMeta
@@ -534,17 +537,6 @@ class MipShell extends CustomElement {
 
       // Rebind header events
       this.bindHeaderEvents()
-    }
-  }
-
-  slideHeader (direction) {
-    if (this.pauseBouncyHeader) {
-      return
-    }
-    if (direction === 'up') {
-      this.$el.classList.add('slide-up')
-    } else {
-      this.$el.classList.remove('slide-up')
     }
   }
 
@@ -608,14 +600,10 @@ class MipShell extends CustomElement {
       window.history.scrollRestoration = 'manual'
     }
 
-    let {show: showHeader, bouncy} = this.currentPageMeta.header
+    let {show: showHeader} = this.currentPageMeta.header
     // Set `padding-top` on scroller
     if (showHeader) {
       document.body.classList.add('with-header')
-    }
-
-    if (bouncy) {
-      page.setupBouncyHeader()
     }
 
     // Cross origin
